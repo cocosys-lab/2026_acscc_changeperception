@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>DrawIt — local demo</title>
+<style>
+  body { font-family: Georgia, "Times New Roman", "Cheltenham", serif;
+         max-width: 980px; margin: 28px auto; padding: 0 16px;
+         color: #1a1a1a; background: #ffffff; }
+  h1   { font-size: 26px; margin-bottom: 6px; font-weight: 700; letter-spacing: -0.01em; }
+  .hint { color: #555; font-size: 14px; font-style: italic;
+          margin-bottom: 20px; line-height: 1.45; }
+  .panel { display: grid; grid-template-columns: 1fr 360px; gap: 20px; align-items: start; }
+  @media (max-width: 800px) { .panel { grid-template-columns: 1fr; } }
+  pre  { background: #fdfaf2; border: 1px solid #e6dfcf; padding: 10px;
+         font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 11px;
+         max-height: 460px; overflow: auto; white-space: pre-wrap; word-break: break-all;
+         border-radius: 2px; }
+  .stat { background: #fdfaf2; border: 1px solid #e6dfcf; padding: 12px;
+          font-size: 13px; border-radius: 2px; margin-bottom: 12px;
+          font-family: Georgia, "Times New Roman", serif; }
+  .stat b { display: inline-block; min-width: 110px; color: #444;
+            font-weight: 600; font-style: italic; }
+  button.fake-next { padding: 9px 18px; font-size: 14px; margin-top: 12px;
+                     background: #1a1a1a; color: #fdfaf2;
+                     font-family: Georgia, serif; font-style: italic;
+                     border: none; border-radius: 2px; cursor: pointer;
+                     letter-spacing: 0.02em; }
+  button.fake-next:disabled { background: #bbb; color: #666; cursor: not-allowed; }
+</style>
+</head>
+<body>
+  <h1>DrawIt — local demo (no Qualtrics)</h1>
+  <div class="hint">
+    This page mirrors what participants will see inside Qualtrics. Draw on the chart
+    by clicking and dragging. The right panel shows the data you'll receive in
+    Embedded Data. Resize your window to see the responsive layout.
+  </div>
+
+  <div class="panel">
+    <div id="chart"></div>
+
+    <div>
+      <div class="stat" id="summary">Draw something to see live stats…</div>
+      <div style="font-size: 13px; margin-bottom: 4px;"><b>Snapshot (truncated):</b></div>
+      <pre id="snapshot">{}</pre>
+      <button class="fake-next" id="fake-next" disabled>Next (mock)</button>
+    </div>
+  </div>
+
+  <!-- Mock the bits of Qualtrics' SurveyEngine the library calls -->
+  <script>
+    window.Qualtrics = {
+      SurveyEngine: {
+        _ed: {},
+        setEmbeddedData: function (k, v) { this._ed[k] = v; }
+      }
+    };
+    // Fake question object — mirrors the methods DrawIt calls on `this` in Qualtrics
+    var fakeQ = {
+      enableNextButton:  function () { document.getElementById('fake-next').disabled = false; },
+      disableNextButton: function () { document.getElementById('fake-next').disabled = true; }
+    };
+  </script>
+  <script src="drawit-library.js"></script>
+  <script>
+    // Demo "real" data — replace with your own. In Qualtrics you'd point at a CSV
+    // hosted in your Library via truthCsvUrl instead of inlining values like this.
+    var demoTruth = [
+      { x: 1960, y: 45 },   // approximate placeholder values — edit for your study
+      { x: 1970, y: 47 },
+      { x: 1980, y: 50 },
+      { x: 1990, y: 56 },
+      { x: 2000, y: 64 },
+      { x: 2010, y: 69 },
+      { x: 2020, y: 72 },
+      { x: 2025, y: 73 }
+    ];
+
+    var drawit = window.DrawIt.init(document.getElementById('chart'), {
+      qid: 'demo',
+      title:       'Estimate the % of US adults who are overweight (BMI \u2265 25), 1900\u20132100',
+      instruction: 'Click and drag across the chart to draw your estimate. The red dot is a known data point. When you\u2019re done, click Submit to see the real data.',
+      xLabel: 'Year',
+      yLabel: '% of US adults',
+      xMin: 1900, xMax: 2100, xStep: 1,
+      yMin: 0,    yMax: 100,  yStep: 1,
+      xMajorTick: 25,
+      yMajorTick: 10,
+      anchor: { x: 2025, y: 73 },
+      anchorLabel: 'Known: 73% in 2025',
+      truthData: demoTruth,                  // for Qualtrics, use truthCsvUrl instead
+      onChange: function (snap) {
+        var nonAnchorEvents = snap.events.length;
+        var firstFew = snap.finalY.slice(0, 6).map(function (v) { return v == null ? '·' : v; }).join(', ');
+        document.getElementById('summary').innerHTML =
+            '<div><b>Coverage</b> ' + Math.round(snap.coverage * 100) + '% &nbsp; (' +
+            (snap.complete ? 'complete \u2713' : 'incomplete') + ')</div>' +
+            '<div><b>Edits</b> ' + snap.editCount + '</div>' +
+            '<div><b>Time</b> ' + (snap.timeMs/1000).toFixed(1) + 's</div>' +
+            '<div><b>Events</b> ' + nonAnchorEvents + ' point updates</div>' +
+            '<div><b>First 6 y</b> [' + firstFew + ' …]</div>';
+
+        // Truncate event log for display
+        var displayed = {
+          qid: snap.qid,
+          finalY_first10: snap.finalY.slice(0, 10),
+          finalY_last10:  snap.finalY.slice(-10),
+          events_count:   snap.events.length,
+          events_first5:  snap.events.slice(0, 5),
+          events_last5:   snap.events.slice(-5),
+          editCount:      snap.editCount,
+          timeMs:         snap.timeMs,
+          complete:       snap.complete,
+          embeddedData:   window.Qualtrics.SurveyEngine._ed
+        };
+        document.getElementById('snapshot').textContent = JSON.stringify(displayed, null, 2);
+      }
+    }, fakeQ);
+
+    document.getElementById('fake-next').addEventListener('click', function () {
+      drawit.flush();
+      alert('In Qualtrics, this is when the page would advance. The latest snapshot is committed to Embedded Data.');
+    });
+  </script>
+</body>
+</html>
